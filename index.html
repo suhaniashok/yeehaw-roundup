@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>lasso chaos</title>
+<style>
+  :root {
+    --bg: #f4efe6;
+    --ink: #2b2622;
+    --rope: #6b4a2b;
+    --shape: #d8c8a8;
+    --shape-edge: #8a6a3a;
+    --selected: #d97c4a;
+    --aim: rgba(43, 38, 34, 0.35);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    overflow: hidden;
+    user-select: none;
+  }
+  canvas { display: block; cursor: crosshair; }
+  .hud {
+    position: fixed; top: 16px; left: 16px;
+    font-size: 12px; line-height: 1.5; opacity: 0.7;
+    pointer-events: none;
+  }
+  .hud b { font-weight: 600; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 13px; opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 0.8; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud">
+  <div><b>click in the throw zone</b>, drag toward target, <b>release</b> to throw</div>
+  <div><b>r</b> to reset, <b>space</b> to scatter shapes</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const toast = document.getElementById("toast");
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth * devicePixelRatio;
+  H = canvas.height = window.innerHeight * devicePixelRatio;
+  canvas.style.width = window.innerWidth + "px";
+  canvas.style.height = window.innerHeight + "px";
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+}
+resize();
+window.addEventListener("resize", resize);
+
+const view = () => ({ w: canvas.width / devicePixelRatio, h: canvas.height / devicePixelRatio });
+
+const THROW_ZONE = 140; // reserved strip at bottom of screen
+
+// ---------- shapes ----------
+const SHAPE_LABELS = ["headline", "subhead", "button", "card", "avatar", "tag", "icon", "footer"];
+let shapes = [];
+function spawnShapes() {
+  const v = view();
+  const yMax = v.h - THROW_ZONE - 60; // keep shapes above the throw zone
+  shapes = SHAPE_LABELS.map((label, i) => {
+    const w = 80 + Math.random() * 80;
+    const h = 40 + Math.random() * 50;
+    return {
+      x: 120 + Math.random() * (v.w - 240),
+      y: 80 + Math.random() * Math.max(80, yMax - 80 - h),
+      w, h, label,
+      selected: false,
+      shakeT: 0,
+    };
+  });
+}
+spawnShapes();
+
+// ---------- rope (verlet) ----------
+const SEGMENTS = 50;
+const SEG_LEN = 14;
+const GRAVITY = 0.32;
+const FRICTION = 0.99;
+const CONSTRAINT_ITERS = 20;
+
+let rope = null;
+let anchor = { x: 0, y: 0 }; // where the cursor is — the "hand"
+let aiming = false;
+let aimStart = { x: 0, y: 0 };
+let aimEnd = { x: 0, y: 0 };
+let thrown = false;
+let restFrames = 0;
+
+function makeRope(x, y) {
+  const pts = [];
+  for (let i = 0; i < SEGMENTS; i++) {
+    pts.push({ x, y, ox: x, oy: y, pinned: i === 0 });
+  }
+  return { pts, loopRadius: 0, loopGrowth: 0, retract: 1 };
+}
+
+function updateRope() {
+  if (!rope) return;
+  // pin the first point to the anchor (the cursor / hand)
+  rope.pts[0].x = anchor.x;
+  rope.pts[0].y = anchor.y;
+  rope.pts[0].ox = anchor.x;
+  rope.pts[0].oy = anchor.y;
+
+  const retracting = rope.evaluated;
+  const segLen = SEG_LEN * rope.retract;
+
+  // verlet step
+  for (let i = 1; i < rope.pts.length; i++) {
+    const p = rope.pts[i];
+    const vx = (p.x - p.ox) * FRICTION;
+    const vy = (p.y - p.oy) * FRICTION;
+    p.ox = p.x; p.oy = p.y;
+    p.x += vx;
+    p.y += vy + (thrown && !retracting ? GRAVITY : 0);
+  }
+
+  // constrain segment lengths (shrinks during retract)
+  for (let iter = 0; iter < CONSTRAINT_ITERS; iter++) {
+    for (let i = 0; i < rope.pts.length - 1; i++) {
+      const a = rope.pts[i];
+      const b = rope.pts[i + 1];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.0001;
+      const diff = (dist - segLen) / dist;
+      if (!a.pinned) { a.x += dx * 0.5 * diff; a.y += dy * 0.5 * diff; }
+      if (!b.pinned) { b.x -= dx * 0.5 * diff; b.y -= dy * 0.5 * diff; }
+    }
+  }
+
+  // grow the loop at the tip as the throw "opens" the noose
+  const tip = rope.pts[rope.pts.length - 1];
+  const tipVel = Math.hypot(tip.x - tip.ox, tip.y - tip.oy);
+  if (thrown) {
+    // open the loop after launch, settle to a real noose size when at rest
+    const targetRadius = Math.min(90, 45 + tipVel * 3);
+    rope.loopRadius += (targetRadius - rope.loopRadius) * 0.12;
+
+    // single catch moment: when the lasso lands (or after a max time)
+    const elapsed = performance.now() - rope.throwStart;
+    if (!rope.evaluated) {
+      const settled = elapsed > 350 && tipVel < 0.9;
+      const timedOut = elapsed > 1300;
+      if (settled || timedOut) {
+        rope.evaluated = true;
+        finalizeCatch();
+      }
+    } else {
+      // retract: shrink segment length and the loop, pulling rope back to anchor
+      rope.retract = Math.max(0, rope.retract - rope.retractRate);
+      rope.loopRadius *= rope.loopFade;
+      // only disappear once the tip has actually reached the cursor
+      const tipDist = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
+      if (rope.retract <= 0 && tipDist < 6) {
+        for (const s of shapes) {
+          if (s.selected) {
+            s.dx = s.x - anchor.x;
+            s.dy = s.y - anchor.y;
+            s.tether = "anchor";
+          }
+        }
+        rope = null; thrown = false; restFrames = 0;
+        return;
+      }
+    }
+  }
+
+  // shape shake decay
+  for (const s of shapes) if (s.shakeT > 0) s.shakeT *= 0.85;
+}
+
+function updateCaughtShapes() {
+  for (const s of shapes) {
+    if (!s.selected) continue;
+    let tx, ty;
+    if (s.tether === "tip" && rope) {
+      const tip = rope.pts[rope.pts.length - 1];
+      tx = tip.x + s.dx;
+      ty = tip.y + s.dy;
+    } else {
+      tx = anchor.x + s.dx;
+      ty = anchor.y + s.dy;
+    }
+    s.x += (tx - s.x) * 0.4;
+    s.y += (ty - s.y) * 0.4;
+  }
+}
+
+function finalizeCatch() {
+  // single overlap check at the moment of landing
+  const tip = rope.pts[rope.pts.length - 1];
+  const r = rope.loopRadius;
+  for (const s of shapes) {
+    if (s.selected) continue;
+    const nearestX = Math.max(s.x, Math.min(tip.x, s.x + s.w));
+    const nearestY = Math.max(s.y, Math.min(tip.y, s.y + s.h));
+    const d = Math.hypot(tip.x - nearestX, tip.y - nearestY);
+    if (d < r) {
+      s.selected = true;
+      s.shakeT = 8;
+      s.dx = s.x - tip.x;
+      s.dy = s.y - tip.y;
+      s.tether = "tip";
+    }
+  }
+
+  const caught = shapes.filter(s => s.selected && s.shakeT > 0);
+  if (caught.length === 0) {
+    showToast("missed.");
+  } else if (caught.length === 1) {
+    showToast(`caught: ${caught[0].label}`);
+  } else {
+    showToast(`caught ${caught.length}: ${caught.map(s => s.label).join(", ")}`);
+  }
+}
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add("show");
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove("show"), 1400);
+}
+
+// ---------- input ----------
+canvas.addEventListener("mousemove", e => {
+  if (aiming) {
+    aimEnd.x = e.clientX; aimEnd.y = e.clientY;
+  } else {
+    anchor.x = e.clientX;
+    anchor.y = e.clientY;
+  }
+});
+canvas.addEventListener("mousedown", e => {
+  if (thrown) return;
+  const v = view();
+  if (e.clientY < v.h - THROW_ZONE) return; // must launch from the throw zone
+  aiming = true;
+  aimStart.x = aimEnd.x = anchor.x = e.clientX;
+  aimStart.y = aimEnd.y = anchor.y = e.clientY;
+});
+canvas.addEventListener("mouseup", e => {
+  if (!aiming) return;
+  aiming = false;
+  // throw in the direction of the drag — drag toward target, release to throw at it
+  const dx = aimEnd.x - aimStart.x;
+  const dy = aimEnd.y - aimStart.y;
+  const power = Math.min(40, Math.hypot(dx, dy) / 4);
+  if (power < 1.5) return;
+  const angle = Math.atan2(dy, dx);
+  launchLasso(angle, power);
+});
+window.addEventListener("keydown", e => {
+  if (e.key === "r") { rope = null; thrown = false; for (const s of shapes) s.selected = false; }
+  if (e.key === " ") { e.preventDefault(); spawnShapes(); }
+});
+
+function launchLasso(angle, power) {
+  rope = makeRope(anchor.x, anchor.y);
+  // give every point a starting velocity in the throw direction, so the rope unfurls
+  const vx = Math.cos(angle) * power;
+  const vy = Math.sin(angle) * power;
+  for (let i = 1; i < rope.pts.length; i++) {
+    const t = i / rope.pts.length;
+    rope.pts[i].ox = rope.pts[i].x - vx * t;
+    rope.pts[i].oy = rope.pts[i].y - vy * t;
+  }
+  thrown = true;
+  restFrames = 0;
+  rope.throwStart = performance.now();
+  rope.evaluated = false;
+  rope.power = power;
+  // retract speed mirrors throw power: hard throw → snaps back fast, soft throw → drifts back
+  rope.retractRate = Math.max(0.012, power * 0.0018);
+  rope.loopFade = 1 - rope.retractRate * 3;
+}
+
+// ---------- draw ----------
+function draw() {
+  const v = view();
+  ctx.clearRect(0, 0, v.w, v.h);
+
+  // throw zone (the "ground" you stand on)
+  ctx.save();
+  ctx.fillStyle = "rgba(107, 74, 43, 0.06)";
+  ctx.fillRect(0, v.h - THROW_ZONE, v.w, THROW_ZONE);
+  ctx.strokeStyle = "rgba(107, 74, 43, 0.35)";
+  ctx.setLineDash([6, 6]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, v.h - THROW_ZONE);
+  ctx.lineTo(v.w, v.h - THROW_ZONE);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(107, 74, 43, 0.5)";
+  ctx.font = "11px ui-monospace, Menlo, monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("throw zone — click here to launch", 16, v.h - THROW_ZONE + 18);
+  ctx.restore();
+
+  // shapes
+  for (const s of shapes) {
+    const shake = s.shakeT > 0.1 ? (Math.random() - 0.5) * s.shakeT : 0;
+    ctx.save();
+    ctx.translate(shake, shake);
+    ctx.globalAlpha = s.selected ? 0.5 : 1;
+    ctx.fillStyle = getCSS("--shape");
+    ctx.strokeStyle = getCSS("--shape-edge");
+    ctx.lineWidth = 1;
+    roundRect(ctx, s.x, s.y, s.w, s.h, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = getCSS("--ink");
+    ctx.font = "12px ui-monospace, Menlo, monospace";
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    ctx.fillText(s.label, s.x + s.w / 2, s.y + s.h / 2);
+    ctx.restore();
+  }
+
+  // aim line
+  if (aiming) {
+    const dx = aimStart.x - aimEnd.x;
+    const dy = aimStart.y - aimEnd.y;
+    const power = Math.min(1, Math.hypot(dx, dy) / 200);
+    ctx.strokeStyle = getCSS("--aim");
+    ctx.setLineDash([4, 6]);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(aimStart.x, aimStart.y);
+    ctx.lineTo(aimEnd.x, aimEnd.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // power indicator at cursor
+    ctx.beginPath();
+    ctx.arc(aimStart.x, aimStart.y, 4 + power * 16, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // rope
+  if (rope) {
+    ctx.strokeStyle = getCSS("--rope");
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(rope.pts[0].x, rope.pts[0].y);
+    for (let i = 1; i < rope.pts.length; i++) {
+      ctx.lineTo(rope.pts[i].x, rope.pts[i].y);
+    }
+    ctx.stroke();
+
+    // loop at the tip
+    const tip = rope.pts[rope.pts.length - 1];
+    if (rope.loopRadius > 1) {
+      // catch detection area: red while flying, blue once the catch has resolved
+      const caught = rope.evaluated;
+      ctx.save();
+      ctx.fillStyle = caught ? "rgba(60, 110, 220, 0.2)" : "rgba(220, 50, 50, 0.18)";
+      ctx.strokeStyle = caught ? "rgba(60, 110, 220, 0.8)" : "rgba(220, 50, 50, 0.7)";
+      ctx.lineWidth = caught ? 1.5 : 1;
+      ctx.beginPath();
+      ctx.arc(tip.x, tip.y, rope.loopRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // visual noose (stretched ellipse following rope direction)
+      const prev = rope.pts[rope.pts.length - 2];
+      const angle = Math.atan2(tip.y - prev.y, tip.x - prev.x);
+      const tipVel = Math.hypot(tip.x - tip.ox, tip.y - tip.oy);
+      const stretch = 1 + Math.min(0.6, tipVel * 0.08);
+      ctx.save();
+      ctx.translate(tip.x, tip.y);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rope.loopRadius * stretch, rope.loopRadius / stretch, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // cursor dot (the "hand") — dim when outside the throw zone
+  if (!thrown) {
+    const inZone = aiming || anchor.y >= v.h - THROW_ZONE;
+    ctx.fillStyle = getCSS("--ink");
+    ctx.globalAlpha = inZone ? 1 : 0.25;
+    ctx.beginPath();
+    ctx.arc(anchor.x, anchor.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+const _cssCache = {};
+function getCSS(name) {
+  if (_cssCache[name]) return _cssCache[name];
+  _cssCache[name] = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return _cssCache[name];
+}
+
+function loop() {
+  updateRope();
+  updateCaughtShapes();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
