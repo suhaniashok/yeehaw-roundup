@@ -36,6 +36,7 @@
     display: block;
     position: fixed; inset: 0;
     width: 100vw; height: 100vh;
+    touch-action: none; /* prevent scroll/zoom while throwing on mobile */
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg stroke-linecap='round' fill='none'%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='white' stroke-width='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='white' stroke-width='2'/%3E%3C/g%3E%3C/svg%3E") 12 12, crosshair;
   }
   canvas.cursor-faded {
@@ -587,42 +588,61 @@ function showToast(msg) {
 }
 
 // ---------- input ----------
-canvas.addEventListener("mousemove", e => {
+// shared helpers so mouse and touch hit the same code paths
+function handlePointerMove(x, y) {
   const v = view();
   const zoneTop = v.h - THROW_ZONE;
-  // fade the cursor when it's outside the throw zone
-  canvas.classList.toggle("cursor-faded", e.clientY < zoneTop && !aiming);
+  canvas.classList.toggle("cursor-faded", y < zoneTop && !aiming);
   if (aiming) {
-    aimEnd.x = e.clientX; aimEnd.y = e.clientY;
+    aimEnd.x = x; aimEnd.y = y;
   } else {
-    // clamp the "hand" to the throw zone so the cursor can't aim from outside it
-    anchor.x = Math.max(8, Math.min(v.w - 8, e.clientX));
-    anchor.y = Math.max(zoneTop + 8, Math.min(v.h - 8, e.clientY));
+    anchor.x = Math.max(8, Math.min(v.w - 8, x));
+    anchor.y = Math.max(zoneTop + 8, Math.min(v.h - 8, y));
   }
-  // cursor stays as the white SVG crosshair set in CSS
-});
-canvas.addEventListener("mousedown", e => {
+}
+function handlePointerDown(x, y) {
   if (thrown) return;
   const v = view();
-  if (e.clientY < v.h - THROW_ZONE) return; // must launch from the throw zone
+  if (y < v.h - THROW_ZONE) return; // must launch from the throw zone
   aiming = true;
-  aimStart.x = aimEnd.x = anchor.x = e.clientX;
-  aimStart.y = aimEnd.y = anchor.y = e.clientY;
-});
-canvas.addEventListener("mouseup", e => {
+  aimStart.x = aimEnd.x = anchor.x = x;
+  aimStart.y = aimEnd.y = anchor.y = y;
+}
+function handlePointerUp() {
   if (!aiming) return;
   aiming = false;
-  // throw in the direction of the drag — drag toward target, release to throw at it
   const dx = aimEnd.x - aimStart.x;
   const dy = aimEnd.y - aimStart.y;
-  // dead-zone: tiny flicks don't launch at all
   const drag = Math.hypot(dx, dy);
   if (drag < 50) return;
-  // clamped linear: gentle for small drags, capped for big drags
   const power = Math.min(35, 8 + (drag - 50) * 0.06);
   const angle = Math.atan2(dy, dx);
   launchLasso(angle, power);
-});
+}
+
+// mouse
+canvas.addEventListener("mousemove", e => handlePointerMove(e.clientX, e.clientY));
+canvas.addEventListener("mousedown", e => handlePointerDown(e.clientX, e.clientY));
+canvas.addEventListener("mouseup", handlePointerUp);
+
+// touch — passive:false so we can preventDefault and stop the page from scrolling
+canvas.addEventListener("touchstart", e => {
+  if (e.touches.length !== 1) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  handlePointerDown(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener("touchmove", e => {
+  if (e.touches.length !== 1) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  handlePointerMove(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener("touchend", e => {
+  e.preventDefault();
+  handlePointerUp();
+}, { passive: false });
+canvas.addEventListener("touchcancel", handlePointerUp);
 window.addEventListener("keydown", e => {
   if (e.key === "r") { resetGame(); }
   if (e.key === " ") { e.preventDefault(); scatterShapes(); }
