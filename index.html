@@ -325,16 +325,11 @@ function updateRope() {
   // verlet step
   for (let i = 1; i < rope.pts.length; i++) {
     const p = rope.pts[i];
-    if (retracting) {
-      // kill momentum during retract — no flopping, just a clean inward pull
-      p.ox = p.x; p.oy = p.y;
-    } else {
-      const vx = (p.x - p.ox) * FRICTION;
-      const vy = (p.y - p.oy) * FRICTION;
-      p.ox = p.x; p.oy = p.y;
-      p.x += vx;
-      p.y += vy + (thrown ? GRAVITY : 0);
-    }
+    const vx = (p.x - p.ox) * FRICTION;
+    const vy = (p.y - p.oy) * FRICTION;
+    p.ox = p.x; p.oy = p.y;
+    p.x += vx;
+    p.y += vy + (thrown && !retracting ? GRAVITY : 0);
   }
 
   // constrain segment lengths (shrinks during retract)
@@ -356,7 +351,7 @@ function updateRope() {
   const tipVel = Math.hypot(tip.x - tip.ox, tip.y - tip.oy);
   if (thrown) {
     // open the loop after launch, settle to a real noose size when at rest
-    const targetRadius = Math.min(110, 60 + tipVel * 3);
+    const targetRadius = Math.min(80, 42 + tipVel * 2.5);
     rope.loopRadius += (targetRadius - rope.loopRadius) * 0.2;
 
     // catch moment: when the lasso reaches its peak distance from the hand
@@ -381,20 +376,12 @@ function updateRope() {
         for (const p of rope.pts) { p.ox = p.x; p.oy = p.y; }
       }
     } else {
-      // retract: shrink segment length and the loop, pulling rope back to anchor
+      // retract: shrink segment length and the loop — chain naturally collapses inward
       rope.retract = Math.max(0, rope.retract - rope.retractRate);
       rope.loopRadius *= rope.loopFade;
-      // direct pull: yank every point toward anchor for a real "zap" feel
-      const pull = Math.min(0.15, rope.retractRate * 1.0);
-      for (let i = 1; i < rope.pts.length; i++) {
-        const p = rope.pts[i];
-        p.x += (anchor.x - p.x) * pull;
-        p.y += (anchor.y - p.y) * pull;
-        p.ox = p.x; p.oy = p.y;
-      }
       // end as soon as the tip is back near the cursor — don't wait for full collapse
       const tipDist = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
-      if (tipDist < 35) {
+      if (tipDist < 25) {
         for (const s of shapes) {
           if (s.selected) {
             s.dx = s.x - anchor.x;
@@ -432,7 +419,7 @@ function updateCaughtShapes() {
 function finalizeCatch() {
   // single overlap check at the moment of landing
   const tip = rope.pts[rope.pts.length - 1];
-  const r = Math.max(rope.loopRadius, 55); // forgiving catch even for short throws
+  const r = Math.max(rope.loopRadius, 38); // forgiving catch even for short throws
   const newlyCaught = [];
   for (const s of shapes) {
     if (s.selected) continue;
@@ -550,7 +537,7 @@ function launchLasso(angle, power) {
   rope.evaluated = false;
   rope.power = power;
   // retract speed mirrors throw power: hard throw → snaps back fast, soft throw → drifts back
-  rope.retractRate = Math.max(0.08, power * 0.002);
+  rope.retractRate = Math.max(0.05, power * 0.0025);
   rope.loopFade = 1 - rope.retractRate * 3;
 }
 
