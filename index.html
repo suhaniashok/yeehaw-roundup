@@ -302,6 +302,7 @@ let aimStart = { x: 0, y: 0 };
 let aimEnd = { x: 0, y: 0 };
 let thrown = false;
 let restFrames = 0;
+let stashedCount = 0; // number of items parked in the throw-zone row
 
 function makeRope(x, y) {
   const pts = [];
@@ -382,11 +383,11 @@ function updateRope() {
       // end as soon as the tip is back near the cursor — don't wait for full collapse
       const tipDist = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
       if (tipDist < 25) {
+        // park newly-caught items in the throw-zone row, not on the cursor
         for (const s of shapes) {
-          if (s.selected) {
-            s.dx = s.x - anchor.x;
-            s.dy = s.y - anchor.y;
-            s.tether = "anchor";
+          if (s.selected && s.tether === "tip") {
+            s.tether = "stash";
+            s.stashIndex = stashedCount++;
           }
         }
         rope = null; thrown = false; restFrames = 0;
@@ -400,10 +401,20 @@ function updateRope() {
 }
 
 function updateCaughtShapes() {
+  const v = view();
+  const SLOT_W = 78;
+  const SLOT_PAD = 6;
+  const SLOT_LEFT = 18;
+  const slotsY = v.h - THROW_ZONE / 2;
   for (const s of shapes) {
     if (!s.selected) continue;
     let tx, ty;
-    if (s.tether === "tip" && rope) {
+    if (s.tether === "stash") {
+      // sit in a fixed slot at the bottom-left of the throw zone
+      const slotCenterX = SLOT_LEFT + s.stashIndex * (SLOT_W + SLOT_PAD) + SLOT_W / 2;
+      tx = slotCenterX - s.w / 2;
+      ty = slotsY - s.h / 2;
+    } else if (s.tether === "tip" && rope) {
       const tip = rope.pts[rope.pts.length - 1];
       tx = tip.x + s.dx;
       ty = tip.y + s.dy;
@@ -462,6 +473,7 @@ function resetGame() {
   rope = null; thrown = false; aiming = false;
   throwsLeft = TOTAL_THROWS;
   scattersLeft = TOTAL_SCATTERS;
+  stashedCount = 0;
   spawnShapes();
   updateHUD();
   winEl.classList.remove("show");
