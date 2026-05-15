@@ -9,13 +9,17 @@
 <meta property="og:type" content="website" />
 <meta property="og:title" content="Yeehaw Roundup" />
 <meta property="og:description" content="A Wild West lasso catch game. Wrangle the whole gang in as few throws as you can." />
-<meta property="og:image" content="https://yeehaw-roundup.vercel.app/images/background.png" />
+<meta property="og:image" content="https://yeehaw-roundup.vercel.app/images/og.jpg" />
+<meta property="og:image:type" content="image/jpeg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Yeehaw Roundup — a Wild West lasso catch game" />
 <meta property="og:url" content="https://yeehaw-roundup.vercel.app/" />
 <!-- Twitter / X card -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Yeehaw Roundup" />
 <meta name="twitter:description" content="A Wild West lasso catch game. Wrangle the whole gang in as few throws as you can." />
-<meta name="twitter:image" content="https://yeehaw-roundup.vercel.app/images/background.png" />
+<meta name="twitter:image" content="https://yeehaw-roundup.vercel.app/images/og.jpg" />
 <!-- Vercel Web Analytics — only works on the deployed site, no-ops locally -->
 <script>
   window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
@@ -569,7 +573,7 @@ function wireChallengeButton(id, kind) {
     const used = TOTAL_THROWS - throwsLeft;
     // append a cache-busting param so iMessage/WhatsApp/etc. don't show
     // stale link-preview metadata cached from before the rename
-    const link = `${window.location.origin}${window.location.pathname}?v=2`;
+    const link = `${window.location.origin}${window.location.pathname}?v=3`;
     const message = kind === "win"
       ? `🤠 Yee-haw! I lasso'd all ${shapes.length} of 'em in just ${used} throws! Think you can wrangle more? ${link}`
       : `💨 Wide loop! Only caught ${caught} before I ran outta throws. Bet you can't do better: ${link}`;
