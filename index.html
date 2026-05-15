@@ -4,39 +4,130 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>lasso chaos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #f4efe6;
     --ink: #2b2622;
-    --rope: #6b4a2b;
+    --rope: hsl(33, 77%, 61%);
+    --rope-dark: #683818;
     --shape: #d8c8a8;
     --shape-edge: #8a6a3a;
     --selected: #d97c4a;
-    --aim: rgba(43, 38, 34, 0.35);
+    --aim: rgba(255, 255, 255, 0.7);
   }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; padding: 0; height: 100%;
-    background: var(--bg); color: var(--ink);
+    background: var(--bg) url("images/background.png") center center / cover no-repeat;
+    color: var(--ink);
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     overflow: hidden;
     user-select: none;
   }
-  canvas { display: block; cursor: crosshair; }
+  canvas {
+    display: block;
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg stroke-linecap='round' fill='none'%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='white' stroke-width='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='white' stroke-width='2'/%3E%3C/g%3E%3C/svg%3E") 12 12, crosshair;
+  }
   .hud {
     position: fixed; top: 16px; left: 16px;
-    font-size: 12px; line-height: 1.5; opacity: 0.7;
+    font-size: 12px; line-height: 1.5;
     pointer-events: none;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
   .hud b { font-weight: 600; }
+  .hud-right {
+    position: fixed; top: 16px; right: 16px;
+    font-size: 12px; line-height: 1.5;
+    pointer-events: none; text-align: right;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+  .hud-right b { font-weight: 600; }
+  .hud-right .low { color: #ff8a70; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
   .toast {
     position: fixed; bottom: 24px; left: 50%;
     transform: translateX(-50%);
     font-size: 13px; opacity: 0;
     transition: opacity 0.2s;
     pointer-events: none;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
-  .toast.show { opacity: 0.8; }
+  .toast.show { opacity: 0.95; }
+  .win, .lose {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: transparent;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.35s ease;
+    z-index: 10; cursor: pointer;
+  }
+  .win.show, .lose.show { opacity: 1; pointer-events: auto; }
+  .win-title, .lose-title {
+    font-family: "Caveat", "Bradley Hand", cursive;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+    margin: 0;
+    text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55), 0 1px 4px rgba(0, 0, 0, 0.6);
+  }
+  .win-title {
+    font-size: clamp(80px, 16vw, 180px);
+    transform: rotate(-4deg);
+  }
+  .lose-title {
+    font-size: clamp(60px, 12vw, 130px);
+    transform: rotate(-2deg);
+  }
+  .win.show .win-title {
+    animation: yeehaw 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  }
+  @keyframes yeehaw {
+    0%   { transform: rotate(-4deg) scale(0.4); opacity: 0; }
+    60%  { transform: rotate(-4deg) scale(1.08); }
+    100% { transform: rotate(-4deg) scale(1); opacity: 1; }
+  }
+  .lose.show .lose-title {
+    animation: dropIn 0.5s ease backwards;
+  }
+  @keyframes dropIn {
+    from { transform: rotate(-2deg) translateY(-30px); opacity: 0; }
+    to   { transform: rotate(-2deg) translateY(0);     opacity: 1; }
+  }
+  .win-sub {
+    margin-top: 18px;
+    font-size: 14px;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    opacity: 0.95;
+  }
+  .win-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    opacity: 0.75;
+  }
+  #music-toggle {
+    position: fixed; bottom: 16px; right: 16px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    color: #fff;
+    padding: 6px 10px;
+    font: 11px ui-monospace, "SF Mono", Menlo, monospace;
+    opacity: 0.85;
+    cursor: pointer;
+    border-radius: 4px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    z-index: 11;
+  }
+  #music-toggle:hover { opacity: 1; }
+  #music-toggle.off { opacity: 0.45; }
 </style>
 </head>
 <body>
@@ -45,12 +136,54 @@
   <div><b>click in the throw zone</b>, drag toward target, <b>release</b> to throw</div>
   <div><b>r</b> to reset, <b>space</b> to scatter shapes</div>
 </div>
+<div class="hud-right">
+  <div>caught: <b id="caught-count">0</b> / 16</div>
+  <div>throws left: <b id="throws-left">32</b></div>
+  <div>scatters left: <b id="scatters-left">3</b></div>
+</div>
 <div class="toast" id="toast"></div>
+<div class="win" id="win">
+  <div class="win-title">Yeee-hawwww!</div>
+  <div class="win-sub">you wrangled the whole gang</div>
+  <div class="win-hint">click anywhere or press <b>r</b> to play again</div>
+</div>
+<div class="lose" id="lose">
+  <div class="lose-title">Outta throws!</div>
+  <div class="win-sub" id="lose-sub">the herd got away</div>
+  <div class="win-hint">click anywhere or press <b>r</b> to try again</div>
+</div>
+<audio id="bgm" src="audio/cowboy.mp3" loop preload="auto"></audio>
+<button id="music-toggle" type="button">♪ music</button>
 
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const toast = document.getElementById("toast");
+const winEl = document.getElementById("win");
+const loseEl = document.getElementById("lose");
+const loseSubEl = document.getElementById("lose-sub");
+const caughtCountEl = document.getElementById("caught-count");
+const throwsLeftEl = document.getElementById("throws-left");
+const scattersLeftEl = document.getElementById("scatters-left");
+
+// ---------- background music ----------
+const bgm = document.getElementById("bgm");
+const musicToggle = document.getElementById("music-toggle");
+bgm.volume = 0.25;
+let musicWanted = true;
+function tryPlayMusic() {
+  if (!musicWanted) return;
+  bgm.play().catch(() => {/* still blocked, will retry on next interaction */});
+}
+// browsers block autoplay until the user interacts with the page
+window.addEventListener("mousedown", tryPlayMusic, { once: false });
+window.addEventListener("keydown", tryPlayMusic, { once: false });
+musicToggle.addEventListener("click", e => {
+  e.stopPropagation();
+  musicWanted = !musicWanted;
+  if (musicWanted) { bgm.play().catch(() => {}); musicToggle.classList.remove("off"); musicToggle.textContent = "♪ music"; }
+  else { bgm.pause(); musicToggle.classList.add("off"); musicToggle.textContent = "♪ muted"; }
+});
 
 let W, H;
 function resize() {
@@ -67,25 +200,93 @@ const view = () => ({ w: canvas.width / devicePixelRatio, h: canvas.height / dev
 
 const THROW_ZONE = 140; // reserved strip at bottom of screen
 
-// ---------- shapes ----------
-const SHAPE_LABELS = ["headline", "subhead", "button", "card", "avatar", "tag", "icon", "footer"];
+const MISS_MESSAGES = [
+  "Missed your mark, cowpoke!",
+  "Wide loop!",
+  "Roped air!",
+  "No catch!",
+  "Lasso'd nothin'!",
+];
+let missIndex = 0;
+
+const TOTAL_THROWS = 32; // 16 items * 2 chances
+const TOTAL_SCATTERS = 3;
+let throwsLeft = TOTAL_THROWS;
+let scattersLeft = TOTAL_SCATTERS;
+function updateHUD() {
+  const caughtCount = shapes.filter(s => s.selected).length;
+  caughtCountEl.textContent = caughtCount;
+  throwsLeftEl.textContent = throwsLeft;
+  throwsLeftEl.classList.toggle("low", throwsLeft <= 5);
+  scattersLeftEl.textContent = scattersLeft;
+  scattersLeftEl.classList.toggle("low", scattersLeft === 0);
+}
+
+// ---------- catchable items (PNG illustrations) ----------
+const ITEM_KINDS = [
+  "canteen", "spur", "rug", "horse", "bolo", "holster", "wheel", "vest",
+  "chaps", "horseshoe", "sheriff", "bandana", "rope", "saddle", "buckle", "gloves",
+];
+const itemImages = {};
+let imagesLoaded = 0;
+for (const kind of ITEM_KINDS) {
+  const img = new Image();
+  img.onload = () => {
+    imagesLoaded++;
+    // re-spawn once everything is loaded so sizing matches the natural aspect ratios
+    if (imagesLoaded === ITEM_KINDS.length) spawnShapes();
+  };
+  img.src = `images/${kind}.png`;
+  itemImages[kind] = img;
+}
+
 let shapes = [];
 function spawnShapes() {
   const v = view();
-  const yMax = v.h - THROW_ZONE - 60; // keep shapes above the throw zone
-  shapes = SHAPE_LABELS.map((label, i) => {
-    const w = 80 + Math.random() * 80;
-    const h = 40 + Math.random() * 50;
+  const yMax = v.h - THROW_ZONE - 60;
+  shapes = ITEM_KINDS.map((kind, i) => {
+    const baseSize = 95 + Math.random() * 25;
+    const img = itemImages[kind];
+    // honor the image's natural aspect ratio so things aren't squished
+    let w = baseSize, h = baseSize;
+    if (img && img.naturalWidth > 0) {
+      const ratio = img.naturalWidth / img.naturalHeight;
+      if (ratio >= 1) { w = baseSize; h = baseSize / ratio; }
+      else { h = baseSize; w = baseSize * ratio; }
+    }
     return {
-      x: 120 + Math.random() * (v.w - 240),
-      y: 80 + Math.random() * Math.max(80, yMax - 80 - h),
-      w, h, label,
+      x: 60 + Math.random() * Math.max(40, v.w - 120 - w),
+      y: 60 + Math.random() * Math.max(80, yMax - 60 - h),
+      w, h, kind,
       selected: false,
       shakeT: 0,
     };
   });
 }
 spawnShapes();
+updateHUD();
+
+function scatterShapes() {
+  if (scattersLeft <= 0) {
+    showToast("out of scatters!");
+    return;
+  }
+  const v = view();
+  const yMax = v.h - THROW_ZONE - 60;
+  for (const s of shapes) {
+    if (s.selected) continue; // caught ones stay with the cursor
+    s.x = 60 + Math.random() * Math.max(40, v.w - 120 - s.w);
+    s.y = 60 + Math.random() * Math.max(80, yMax - 60 - s.h);
+  }
+  scattersLeft--;
+  updateHUD();
+}
+
+function drawIllustration(ctx, s) {
+  const img = itemImages[s.kind];
+  if (!img || !img.complete || img.naturalWidth === 0) return;
+  ctx.drawImage(img, s.x, s.y, s.w, s.h);
+}
 
 // ---------- rope (verlet) ----------
 const SEGMENTS = 50;
@@ -150,25 +351,37 @@ function updateRope() {
   const tipVel = Math.hypot(tip.x - tip.ox, tip.y - tip.oy);
   if (thrown) {
     // open the loop after launch, settle to a real noose size when at rest
-    const targetRadius = Math.min(90, 45 + tipVel * 3);
-    rope.loopRadius += (targetRadius - rope.loopRadius) * 0.12;
+    const targetRadius = Math.min(110, 60 + tipVel * 3);
+    rope.loopRadius += (targetRadius - rope.loopRadius) * 0.2;
 
-    // single catch moment: when the lasso lands (or after a max time)
+    // catch moment: when the lasso reaches its peak distance from the hand
     const elapsed = performance.now() - rope.throwStart;
     if (!rope.evaluated) {
-      const settled = elapsed > 350 && tipVel < 0.9;
+      const tipReach = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
+      rope.maxReach = Math.max(rope.maxReach || 0, tipReach);
+      // count consecutive frames of declining reach — unfurl wobble is 1-2 frames,
+      // a real peak transition stays in decline. fires close to the true peak.
+      if (tipReach < (rope.prevReach ?? tipReach)) {
+        rope.declineFrames = (rope.declineFrames || 0) + 1;
+      } else {
+        rope.declineFrames = 0;
+      }
+      rope.prevReach = tipReach;
+      const passedPeak = rope.maxReach > 15 && rope.declineFrames >= 3;
       const timedOut = elapsed > 1300;
-      if (settled || timedOut) {
+      if (passedPeak || timedOut) {
         rope.evaluated = true;
         finalizeCatch();
+        // freeze rope momentum so the retract is a straight pull, not a swing
+        for (const p of rope.pts) { p.ox = p.x; p.oy = p.y; }
       }
     } else {
       // retract: shrink segment length and the loop, pulling rope back to anchor
       rope.retract = Math.max(0, rope.retract - rope.retractRate);
       rope.loopRadius *= rope.loopFade;
-      // only disappear once the tip has actually reached the cursor
+      // end as soon as the tip is back near the cursor — don't wait for full collapse
       const tipDist = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
-      if (rope.retract <= 0 && tipDist < 6) {
+      if (tipDist < 20) {
         for (const s of shapes) {
           if (s.selected) {
             s.dx = s.x - anchor.x;
@@ -206,7 +419,8 @@ function updateCaughtShapes() {
 function finalizeCatch() {
   // single overlap check at the moment of landing
   const tip = rope.pts[rope.pts.length - 1];
-  const r = rope.loopRadius;
+  const r = Math.max(rope.loopRadius, 55); // forgiving catch even for short throws
+  const newlyCaught = [];
   for (const s of shapes) {
     if (s.selected) continue;
     const nearestX = Math.max(s.x, Math.min(tip.x, s.x + s.w));
@@ -218,18 +432,43 @@ function finalizeCatch() {
       s.dx = s.x - tip.x;
       s.dy = s.y - tip.y;
       s.tether = "tip";
+      newlyCaught.push(s);
     }
   }
 
-  const caught = shapes.filter(s => s.selected && s.shakeT > 0);
-  if (caught.length === 0) {
-    showToast("missed.");
-  } else if (caught.length === 1) {
-    showToast(`caught: ${caught[0].label}`);
+  if (newlyCaught.length === 0) {
+    showToast(MISS_MESSAGES[missIndex++ % MISS_MESSAGES.length]);
+  } else if (newlyCaught.length === 1) {
+    showToast(`caught: ${newlyCaught[0].kind}`);
   } else {
-    showToast(`caught ${caught.length}: ${caught.map(s => s.label).join(", ")}`);
+    showToast(`caught ${newlyCaught.length}: ${newlyCaught.map(s => s.kind).join(", ")}`);
+  }
+
+  updateHUD();
+
+  // win: every shape caught
+  if (shapes.length > 0 && shapes.every(s => s.selected)) {
+    setTimeout(showWin, 700);
+  } else if (throwsLeft <= 0) {
+    const caughtCount = shapes.filter(s => s.selected).length;
+    loseSubEl.textContent = `you wrangled ${caughtCount} of ${shapes.length} — the rest got away`;
+    setTimeout(showLose, 900);
   }
 }
+
+function showWin() { winEl.classList.add("show"); }
+function showLose() { loseEl.classList.add("show"); }
+function resetGame() {
+  rope = null; thrown = false; aiming = false;
+  throwsLeft = TOTAL_THROWS;
+  scattersLeft = TOTAL_SCATTERS;
+  spawnShapes();
+  updateHUD();
+  winEl.classList.remove("show");
+  loseEl.classList.remove("show");
+}
+winEl.addEventListener("click", resetGame);
+loseEl.addEventListener("click", resetGame);
 
 function showToast(msg) {
   toast.textContent = msg;
@@ -240,12 +479,16 @@ function showToast(msg) {
 
 // ---------- input ----------
 canvas.addEventListener("mousemove", e => {
+  const v = view();
+  const zoneTop = v.h - THROW_ZONE;
   if (aiming) {
     aimEnd.x = e.clientX; aimEnd.y = e.clientY;
   } else {
-    anchor.x = e.clientX;
-    anchor.y = e.clientY;
+    // clamp the "hand" to the throw zone so the cursor can't aim from outside it
+    anchor.x = Math.max(8, Math.min(v.w - 8, e.clientX));
+    anchor.y = Math.max(zoneTop + 8, Math.min(v.h - 8, e.clientY));
   }
+  // cursor stays as the white SVG crosshair set in CSS
 });
 canvas.addEventListener("mousedown", e => {
   if (thrown) return;
@@ -267,11 +510,13 @@ canvas.addEventListener("mouseup", e => {
   launchLasso(angle, power);
 });
 window.addEventListener("keydown", e => {
-  if (e.key === "r") { rope = null; thrown = false; for (const s of shapes) s.selected = false; }
-  if (e.key === " ") { e.preventDefault(); spawnShapes(); }
+  if (e.key === "r") { resetGame(); }
+  if (e.key === " ") { e.preventDefault(); scatterShapes(); }
 });
 
 function launchLasso(angle, power) {
+  throwsLeft = Math.max(0, throwsLeft - 1);
+  updateHUD();
   rope = makeRope(anchor.x, anchor.y);
   // give every point a starting velocity in the throw direction, so the rope unfurls
   const vx = Math.cos(angle) * power;
@@ -298,9 +543,9 @@ function draw() {
 
   // throw zone (the "ground" you stand on)
   ctx.save();
-  ctx.fillStyle = "rgba(107, 74, 43, 0.06)";
+  ctx.fillStyle = "rgba(244, 239, 230, 0.22)";
   ctx.fillRect(0, v.h - THROW_ZONE, v.w, THROW_ZONE);
-  ctx.strokeStyle = "rgba(107, 74, 43, 0.35)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
   ctx.setLineDash([6, 6]);
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -308,29 +553,19 @@ function draw() {
   ctx.lineTo(v.w, v.h - THROW_ZONE);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = "rgba(107, 74, 43, 0.5)";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
   ctx.font = "11px ui-monospace, Menlo, monospace";
   ctx.textAlign = "left";
   ctx.fillText("throw zone — click here to launch", 16, v.h - THROW_ZONE + 18);
   ctx.restore();
 
-  // shapes
+  // shapes — small painterly illustrations
   for (const s of shapes) {
     const shake = s.shakeT > 0.1 ? (Math.random() - 0.5) * s.shakeT : 0;
     ctx.save();
     ctx.translate(shake, shake);
-    ctx.globalAlpha = s.selected ? 0.5 : 1;
-    ctx.fillStyle = getCSS("--shape");
-    ctx.strokeStyle = getCSS("--shape-edge");
-    ctx.lineWidth = 1;
-    roundRect(ctx, s.x, s.y, s.w, s.h, 6);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = getCSS("--ink");
-    ctx.font = "12px ui-monospace, Menlo, monospace";
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    ctx.fillText(s.label, s.x + s.w / 2, s.y + s.h / 2);
+    ctx.globalAlpha = s.selected ? 0.4 : 1;
+    drawIllustration(ctx, s);
     ctx.restore();
   }
 
@@ -353,58 +588,117 @@ function draw() {
     ctx.stroke();
   }
 
-  // rope
+  // rope — outlined warm caramel to match the icon style
   if (rope) {
-    ctx.strokeStyle = getCSS("--rope");
-    ctx.lineWidth = 2;
+    const rc = getCSS("--rope");
+    const rd = getCSS("--rope-dark");
+    const ROPE_W = 6;
+    const OUTLINE_W = ROPE_W + 2.5;
+
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(rope.pts[0].x, rope.pts[0].y);
-    for (let i = 1; i < rope.pts.length; i++) {
-      ctx.lineTo(rope.pts[i].x, rope.pts[i].y);
-    }
+
+    const traceRope = () => {
+      ctx.beginPath();
+      ctx.moveTo(rope.pts[0].x, rope.pts[0].y);
+      for (let i = 1; i < rope.pts.length; i++) {
+        ctx.lineTo(rope.pts[i].x, rope.pts[i].y);
+      }
+    };
+
+    // dark outline first
+    ctx.strokeStyle = rd;
+    ctx.lineWidth = OUTLINE_W;
+    traceRope();
     ctx.stroke();
+
+    // warm rope fill on top
+    ctx.strokeStyle = rc;
+    ctx.lineWidth = ROPE_W;
+    traceRope();
+    ctx.stroke();
+
+    // delicate twist marks across the rope
+    ctx.strokeStyle = rd;
+    ctx.lineWidth = 1.4;
+    ctx.lineCap = "round";
+    for (let i = 3; i < rope.pts.length - 1; i += 3) {
+      const a = rope.pts[i - 1];
+      const b = rope.pts[i + 1];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      const cx = rope.pts[i].x;
+      const cy = rope.pts[i].y;
+      const r = ROPE_W * 0.4; // stay inside the rope fill
+      ctx.beginPath();
+      ctx.moveTo(cx - nx * r, cy - ny * r);
+      ctx.lineTo(cx + nx * r, cy + ny * r);
+      ctx.stroke();
+    }
 
     // loop at the tip
     const tip = rope.pts[rope.pts.length - 1];
     if (rope.loopRadius > 1) {
-      // catch detection area: red while flying, blue once the catch has resolved
-      const caught = rope.evaluated;
-      ctx.save();
-      ctx.fillStyle = caught ? "rgba(60, 110, 220, 0.2)" : "rgba(220, 50, 50, 0.18)";
-      ctx.strokeStyle = caught ? "rgba(60, 110, 220, 0.8)" : "rgba(220, 50, 50, 0.7)";
-      ctx.lineWidth = caught ? 1.5 : 1;
-      ctx.beginPath();
-      ctx.arc(tip.x, tip.y, rope.loopRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-
-      // visual noose (stretched ellipse following rope direction)
       const prev = rope.pts[rope.pts.length - 2];
       const angle = Math.atan2(tip.y - prev.y, tip.x - prev.x);
       const tipVel = Math.hypot(tip.x - tip.ox, tip.y - tip.oy);
       const stretch = 1 + Math.min(0.6, tipVel * 0.08);
+      const rx = rope.loopRadius * stretch;
+      const ry = rope.loopRadius / stretch;
+
       ctx.save();
       ctx.translate(tip.x, tip.y);
       ctx.rotate(angle);
+
+      // dark outline
+      ctx.strokeStyle = rd;
+      ctx.lineWidth = OUTLINE_W;
       ctx.beginPath();
-      ctx.ellipse(0, 0, rope.loopRadius * stretch, rope.loopRadius / stretch, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
       ctx.stroke();
+
+      // warm fill
+      ctx.strokeStyle = rc;
+      ctx.lineWidth = ROPE_W;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // delicate twist marks around the loop
+      ctx.strokeStyle = rd;
+      ctx.lineWidth = 1.4;
+      const TICKS = 16;
+      for (let i = 0; i < TICKS; i++) {
+        const t = (i / TICKS) * Math.PI * 2;
+        const cx = Math.cos(t) * rx;
+        const cy = Math.sin(t) * ry;
+        const tx = -Math.sin(t) * rx;
+        const ty = Math.cos(t) * ry;
+        const tlen = Math.hypot(tx, ty) || 1;
+        const nx = -ty / tlen, ny = tx / tlen;
+        const r = ROPE_W * 0.4;
+        ctx.beginPath();
+        ctx.moveTo(cx - nx * r, cy - ny * r);
+        ctx.lineTo(cx + nx * r, cy + ny * r);
+        ctx.stroke();
+      }
       ctx.restore();
+
+      // knot where the rope meets the loop
+      ctx.fillStyle = rd;
+      ctx.beginPath();
+      ctx.arc(tip.x, tip.y, ROPE_W / 2 + 1.5, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
-  // cursor dot (the "hand") — dim when outside the throw zone
+  // cursor dot (the "hand") — clamped to the throw zone
   if (!thrown) {
-    const inZone = aiming || anchor.y >= v.h - THROW_ZONE;
-    ctx.fillStyle = getCSS("--ink");
-    ctx.globalAlpha = inZone ? 1 : 0.25;
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.arc(anchor.x, anchor.y, 3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
   }
 }
 
