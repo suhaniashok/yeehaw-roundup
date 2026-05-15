@@ -567,7 +567,9 @@ function wireChallengeButton(id, kind) {
     e.stopPropagation(); // don't trigger the screen's reset-on-click
     const caught = shapes.filter(s => s.selected).length;
     const used = TOTAL_THROWS - throwsLeft;
-    const link = window.location.href;
+    // append a cache-busting param so iMessage/WhatsApp/etc. don't show
+    // stale link-preview metadata cached from before the rename
+    const link = `${window.location.origin}${window.location.pathname}?v=2`;
     const message = kind === "win"
       ? `🤠 Yee-haw! I lasso'd all ${shapes.length} of 'em in just ${used} throws! Think you can wrangle more? ${link}`
       : `💨 Wide loop! Only caught ${caught} before I ran outta throws. Bet you can't do better: ${link}`;
