@@ -340,7 +340,7 @@ function drawIllustration(ctx, s) {
 
 // ---------- rope (verlet) ----------
 const SEGMENTS = 50;
-const SEG_LEN = 14;
+const SEG_LEN = IS_MOBILE ? 9 : 14;
 const GRAVITY = 0.32;
 const FRICTION = 0.99;
 const CONSTRAINT_ITERS = 20;
@@ -735,8 +735,8 @@ function draw() {
   if (rope) {
     const rc = getCSS("--rope");
     const rd = getCSS("--rope-dark");
-    const ROPE_W = 6;
-    const OUTLINE_W = ROPE_W + 2.5;
+    const ROPE_W = IS_MOBILE ? 4 : 6;
+    const OUTLINE_W = ROPE_W + (IS_MOBILE ? 1.5 : 2.5);
 
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
