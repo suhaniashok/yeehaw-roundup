@@ -34,6 +34,8 @@
   }
   canvas {
     display: block;
+    position: fixed; inset: 0;
+    width: 100vw; height: 100vh;
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg stroke-linecap='round' fill='none'%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='white' stroke-width='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='white' stroke-width='2'/%3E%3C/g%3E%3C/svg%3E") 12 12, crosshair;
   }
   canvas.cursor-faded {
@@ -171,7 +173,7 @@
 <body>
 <canvas id="c"></canvas>
 <div class="hud">
-  <div><b>r</b> to reset, <b>space</b> to scatter shapes</div>
+  <div><b>r</b> to reset, <b>space</b> to scatter</div>
 </div>
 <div class="hud-right">
   <div>caught: <b id="caught-count">0</b> / 16</div>
@@ -837,13 +839,29 @@ function getCSS(name) {
   return _cssCache[name];
 }
 
-function loop() {
-  updateRope();
-  updateCaughtShapes();
+// fixed-timestep physics decouples behavior from display refresh rate
+// so the lasso feels the same on 60Hz Safari and 120Hz Chrome/ProMotion.
+// 120Hz matches the snappy feel Chrome had on ProMotion displays.
+const PHYSICS_STEP_MS = 1000 / 120;
+let physicsAccumulator = 0;
+let lastFrameTime = performance.now();
+
+function loop(now) {
+  const elapsed = now - lastFrameTime;
+  lastFrameTime = now;
+  // cap the accumulator so a tab-switch pause doesn't trigger a runaway catch-up
+  physicsAccumulator = Math.min(physicsAccumulator + elapsed, 250);
+
+  while (physicsAccumulator >= PHYSICS_STEP_MS) {
+    updateRope();
+    updateCaughtShapes();
+    physicsAccumulator -= PHYSICS_STEP_MS;
+  }
+
   draw();
   requestAnimationFrame(loop);
 }
-loop();
+requestAnimationFrame(loop);
 </script>
 </body>
 </html>
