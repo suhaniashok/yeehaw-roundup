@@ -31,6 +31,9 @@
     display: block;
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg stroke-linecap='round' fill='none'%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='white' stroke-width='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='white' stroke-width='2'/%3E%3C/g%3E%3C/svg%3E") 12 12, crosshair;
   }
+  canvas.cursor-faded {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' opacity='0.6'%3E%3Cg stroke-linecap='round' fill='none'%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='black' stroke-width='3.5' stroke-opacity='0.45'/%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='white' stroke-width='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='white' stroke-width='2'/%3E%3C/g%3E%3C/svg%3E") 12 12, crosshair;
+  }
   .hud {
     position: fixed; top: 16px; left: 16px;
     font-size: 12px; line-height: 1.5;
@@ -48,6 +51,7 @@
   }
   .hud-right b { font-weight: 600; }
   .hud-right .low { color: #ff8a70; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+  .hud-right .dim { color: #fff; opacity: 0.6; }
   .toast {
     position: fixed; bottom: 24px; left: 50%;
     transform: translateX(-50%);
@@ -113,6 +117,35 @@
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
     opacity: 0.75;
   }
+  .end-actions {
+    margin-top: 48px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .end-btn {
+    padding: 10px 18px;
+    font: 13px ui-monospace, "SF Mono", Menlo, monospace;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: transform 0.1s, background 0.2s;
+  }
+  .end-btn:hover { transform: translateY(-1px); }
+  .end-btn:active { transform: translateY(0); }
+  .challenge-btn {
+    background: transparent;
+    border: 1px solid #fff;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+  .challenge-btn:hover { background: rgba(255, 255, 255, 0.15); }
+  .play-btn {
+    background: #fff;
+    border: 1px solid #fff;
+    color: #683818;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  .play-btn:hover { background: #fff; }
   #music-toggle {
     position: fixed; bottom: 16px; right: 16px;
     background: transparent;
@@ -133,7 +166,6 @@
 <body>
 <canvas id="c"></canvas>
 <div class="hud">
-  <div><b>click in the throw zone</b>, drag toward target, <b>release</b> to throw</div>
   <div><b>r</b> to reset, <b>space</b> to scatter shapes</div>
 </div>
 <div class="hud-right">
@@ -144,13 +176,19 @@
 <div class="toast" id="toast"></div>
 <div class="win" id="win">
   <div class="win-title">Yeee-hawwww!</div>
-  <div class="win-sub">you wrangled the whole gang</div>
-  <div class="win-hint">click anywhere or press <b>r</b> to play again</div>
+  <div class="win-sub" id="win-sub">you wrangled the whole gang</div>
+  <div class="end-actions">
+    <button class="end-btn challenge-btn" id="win-challenge" type="button">challenge a friend</button>
+    <button class="end-btn play-btn" id="win-play" type="button">play again</button>
+  </div>
 </div>
 <div class="lose" id="lose">
   <div class="lose-title">Outta throws!</div>
   <div class="win-sub" id="lose-sub">the herd got away</div>
-  <div class="win-hint">click anywhere or press <b>r</b> to try again</div>
+  <div class="end-actions">
+    <button class="end-btn challenge-btn" id="lose-challenge" type="button">challenge a friend</button>
+    <button class="end-btn play-btn" id="lose-play" type="button">play again</button>
+  </div>
 </div>
 <audio id="bgm" src="audio/cowboy.mp3" loop preload="auto"></audio>
 <button id="music-toggle" type="button">♪ music</button>
@@ -162,6 +200,7 @@ const toast = document.getElementById("toast");
 const winEl = document.getElementById("win");
 const loseEl = document.getElementById("lose");
 const loseSubEl = document.getElementById("lose-sub");
+const winSubEl = document.getElementById("win-sub");
 const caughtCountEl = document.getElementById("caught-count");
 const throwsLeftEl = document.getElementById("throws-left");
 const scattersLeftEl = document.getElementById("scatters-left");
@@ -219,7 +258,7 @@ function updateHUD() {
   throwsLeftEl.textContent = throwsLeft;
   throwsLeftEl.classList.toggle("low", throwsLeft <= 5);
   scattersLeftEl.textContent = scattersLeft;
-  scattersLeftEl.classList.toggle("low", scattersLeft === 0);
+  scattersLeftEl.classList.toggle("dim", scattersLeft === 0);
 }
 
 // ---------- catchable items (PNG illustrations) ----------
@@ -388,6 +427,8 @@ function updateRope() {
           if (s.selected && s.tether === "tip") {
             s.tether = "stash";
             s.stashIndex = stashedCount++;
+            s.targetW = s.w * 0.65;
+            s.targetH = s.h * 0.65;
           }
         }
         rope = null; thrown = false; restFrames = 0;
@@ -402,16 +443,20 @@ function updateRope() {
 
 function updateCaughtShapes() {
   const v = view();
-  const SLOT_W = 78;
-  const SLOT_PAD = 6;
-  const SLOT_LEFT = 18;
-  const slotsY = v.h - THROW_ZONE / 2;
+  // distribute slots across the full screen width so the row always spans edge-to-edge
+  const SLOT_EDGE_PAD = 28;
+  const totalSlots = Math.max(1, shapes.length);
+  const slotStride = (v.w - SLOT_EDGE_PAD * 2) / totalSlots;
+  const slotsY = v.h - 50;
   for (const s of shapes) {
     if (!s.selected) continue;
     let tx, ty;
     if (s.tether === "stash") {
-      // sit in a fixed slot at the bottom-left of the throw zone
-      const slotCenterX = SLOT_LEFT + s.stashIndex * (SLOT_W + SLOT_PAD) + SLOT_W / 2;
+      // shrink toward target size as it parks
+      s.w += (s.targetW - s.w) * 0.25;
+      s.h += (s.targetH - s.h) * 0.25;
+      // sit in a fixed slot, distributed across the screen width
+      const slotCenterX = SLOT_EDGE_PAD + (s.stashIndex + 0.5) * slotStride;
       tx = slotCenterX - s.w / 2;
       ty = slotsY - s.h / 2;
     } else if (s.tether === "tip" && rope) {
@@ -459,10 +504,12 @@ function finalizeCatch() {
 
   // win: every shape caught
   if (shapes.length > 0 && shapes.every(s => s.selected)) {
+    const throwsUsed = TOTAL_THROWS - throwsLeft;
+    winSubEl.textContent = `you wrangled all ${shapes.length} in ${throwsUsed} throw${throwsUsed === 1 ? "" : "s"}`;
     setTimeout(showWin, 700);
   } else if (throwsLeft <= 0) {
     const caughtCount = shapes.filter(s => s.selected).length;
-    loseSubEl.textContent = `you wrangled ${caughtCount} of ${shapes.length} — the rest got away`;
+    loseSubEl.textContent = `you wrangled ${caughtCount} of ${shapes.length} in ${TOTAL_THROWS} throws — the rest got away`;
     setTimeout(showLose, 900);
   }
 }
@@ -482,6 +529,38 @@ function resetGame() {
 winEl.addEventListener("click", resetGame);
 loseEl.addEventListener("click", resetGame);
 
+function wireChallengeButton(id, kind) {
+  const btn = document.getElementById(id);
+  btn.addEventListener("click", async e => {
+    e.stopPropagation(); // don't trigger the screen's reset-on-click
+    const caught = shapes.filter(s => s.selected).length;
+    const used = TOTAL_THROWS - throwsLeft;
+    const link = window.location.href;
+    const message = kind === "win"
+      ? `🤠 Yee-haw! I lasso'd all ${shapes.length} of 'em in just ${used} throws! Think you can wrangle more? ${link}`
+      : `💨 Wide loop! Only caught ${caught} before I ran outta throws. Bet you can't do better: ${link}`;
+    try {
+      await navigator.clipboard.writeText(message);
+      const original = btn.textContent;
+      btn.textContent = "link copied!";
+      setTimeout(() => { btn.textContent = original; }, 1600);
+    } catch {
+      btn.textContent = "copy failed — try selecting the url";
+    }
+  });
+}
+wireChallengeButton("win-challenge", "win");
+wireChallengeButton("lose-challenge", "lose");
+
+function wirePlayButton(id) {
+  document.getElementById(id).addEventListener("click", e => {
+    e.stopPropagation();
+    resetGame();
+  });
+}
+wirePlayButton("win-play");
+wirePlayButton("lose-play");
+
 function showToast(msg) {
   toast.textContent = msg;
   toast.classList.add("show");
@@ -493,6 +572,8 @@ function showToast(msg) {
 canvas.addEventListener("mousemove", e => {
   const v = view();
   const zoneTop = v.h - THROW_ZONE;
+  // fade the cursor when it's outside the throw zone
+  canvas.classList.toggle("cursor-faded", e.clientY < zoneTop && !aiming);
   if (aiming) {
     aimEnd.x = e.clientX; aimEnd.y = e.clientY;
   } else {
@@ -571,9 +652,9 @@ function draw() {
   ctx.stroke();
   ctx.setLineDash([]);
   ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-  ctx.font = "11px ui-monospace, Menlo, monospace";
+  ctx.font = "12px ui-monospace, Menlo, monospace";
   ctx.textAlign = "left";
-  ctx.fillText("throw zone — click here to launch", 16, v.h - THROW_ZONE + 18);
+  ctx.fillText("throw zone: click, drag, release to launch", 16, v.h - THROW_ZONE + 30);
   ctx.restore();
 
   // shapes — small painterly illustrations
@@ -581,7 +662,7 @@ function draw() {
     const shake = s.shakeT > 0.1 ? (Math.random() - 0.5) * s.shakeT : 0;
     ctx.save();
     ctx.translate(shake, shake);
-    ctx.globalAlpha = s.selected ? 0.4 : 1;
+    ctx.globalAlpha = 1;
     drawIllustration(ctx, s);
     ctx.restore();
   }
