@@ -245,6 +245,9 @@ window.addEventListener("resize", resize);
 
 const view = () => ({ w: canvas.width / devicePixelRatio, h: canvas.height / devicePixelRatio });
 
+// detect mobile/touch devices — smaller items and catch zone make it harder on phones
+const IS_MOBILE = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 700;
+
 const THROW_ZONE = 140; // reserved strip at bottom of screen
 
 const MISS_MESSAGES = [
@@ -292,7 +295,7 @@ function spawnShapes() {
   const v = view();
   const yMax = v.h - THROW_ZONE - 60;
   shapes = ITEM_KINDS.map((kind, i) => {
-    const baseSize = 95 + Math.random() * 25;
+    const baseSize = IS_MOBILE ? 55 + Math.random() * 18 : 95 + Math.random() * 25;
     const img = itemImages[kind];
     // honor the image's natural aspect ratio so things aren't squished
     let w = baseSize, h = baseSize;
@@ -405,7 +408,7 @@ function updateRope() {
   const tipVel = Math.hypot(tip.x - tip.ox, tip.y - tip.oy);
   if (thrown) {
     // open the loop after launch, settle to a real noose size when at rest
-    const targetRadius = Math.min(80, 42 + tipVel * 2.5);
+    const targetRadius = IS_MOBILE ? Math.min(55, 28 + tipVel * 2) : Math.min(80, 42 + tipVel * 2.5);
     rope.loopRadius += (targetRadius - rope.loopRadius) * 0.2;
 
     // catch moment: when the lasso reaches its peak distance from the hand
@@ -489,7 +492,7 @@ function updateCaughtShapes() {
 function finalizeCatch() {
   // single overlap check at the moment of landing
   const tip = rope.pts[rope.pts.length - 1];
-  const r = Math.max(rope.loopRadius, 38); // forgiving catch even for short throws
+  const r = Math.max(rope.loopRadius, IS_MOBILE ? 24 : 38); // forgiving catch even for short throws
   const newlyCaught = [];
   for (const s of shapes) {
     if (s.selected) continue;
