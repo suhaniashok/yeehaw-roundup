@@ -4,6 +4,11 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>lasso chaos</title>
+<!-- Vercel Web Analytics — only works on the deployed site, no-ops locally -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap" rel="stylesheet">
@@ -342,6 +347,12 @@ let aimEnd = { x: 0, y: 0 };
 let thrown = false;
 let restFrames = 0;
 let stashedCount = 0; // number of items parked in the throw-zone row
+let gameStartedTracked = false; // fires `game_started` analytics on first throw of each game
+
+// thin wrapper around Vercel Web Analytics — silently no-ops if not loaded (e.g. local dev)
+function track(name, data) {
+  try { window.va && window.va('event', data ? { name, data } : { name }); } catch (e) {}
+}
 
 function makeRope(x, y) {
   const pts = [];
@@ -506,10 +517,12 @@ function finalizeCatch() {
   if (shapes.length > 0 && shapes.every(s => s.selected)) {
     const throwsUsed = TOTAL_THROWS - throwsLeft;
     winSubEl.textContent = `you wrangled all ${shapes.length} in ${throwsUsed} throw${throwsUsed === 1 ? "" : "s"}`;
+    track("game_won", { throws_used: throwsUsed });
     setTimeout(showWin, 700);
   } else if (throwsLeft <= 0) {
     const caughtCount = shapes.filter(s => s.selected).length;
     loseSubEl.textContent = `you wrangled ${caughtCount} of ${shapes.length} in ${TOTAL_THROWS} throws — the rest got away`;
+    track("game_lost", { caught_count: caughtCount });
     setTimeout(showLose, 900);
   }
 }
@@ -521,6 +534,7 @@ function resetGame() {
   throwsLeft = TOTAL_THROWS;
   scattersLeft = TOTAL_SCATTERS;
   stashedCount = 0;
+  gameStartedTracked = false;
   spawnShapes();
   updateHUD();
   winEl.classList.remove("show");
@@ -541,6 +555,7 @@ function wireChallengeButton(id, kind) {
       : `💨 Wide loop! Only caught ${caught} before I ran outta throws. Bet you can't do better: ${link}`;
     try {
       await navigator.clipboard.writeText(message);
+      track("challenge_shared", { kind });
       const original = btn.textContent;
       btn.textContent = "link copied!";
       setTimeout(() => { btn.textContent = original; }, 1600);
@@ -555,6 +570,7 @@ wireChallengeButton("lose-challenge", "lose");
 function wirePlayButton(id) {
   document.getElementById(id).addEventListener("click", e => {
     e.stopPropagation();
+    track("play_again_clicked");
     resetGame();
   });
 }
@@ -611,6 +627,10 @@ window.addEventListener("keydown", e => {
 });
 
 function launchLasso(angle, power) {
+  if (!gameStartedTracked) {
+    gameStartedTracked = true;
+    track("game_started");
+  }
   throwsLeft = Math.max(0, throwsLeft - 1);
   updateHUD();
   rope = makeRope(anchor.x, anchor.y);
