@@ -325,11 +325,16 @@ function updateRope() {
   // verlet step
   for (let i = 1; i < rope.pts.length; i++) {
     const p = rope.pts[i];
-    const vx = (p.x - p.ox) * FRICTION;
-    const vy = (p.y - p.oy) * FRICTION;
-    p.ox = p.x; p.oy = p.y;
-    p.x += vx;
-    p.y += vy + (thrown && !retracting ? GRAVITY : 0);
+    if (retracting) {
+      // kill momentum during retract — no flopping, just a clean inward pull
+      p.ox = p.x; p.oy = p.y;
+    } else {
+      const vx = (p.x - p.ox) * FRICTION;
+      const vy = (p.y - p.oy) * FRICTION;
+      p.ox = p.x; p.oy = p.y;
+      p.x += vx;
+      p.y += vy + (thrown ? GRAVITY : 0);
+    }
   }
 
   // constrain segment lengths (shrinks during retract)
@@ -367,7 +372,7 @@ function updateRope() {
         rope.declineFrames = 0;
       }
       rope.prevReach = tipReach;
-      const passedPeak = rope.maxReach > 15 && rope.declineFrames >= 3;
+      const passedPeak = rope.maxReach > 100 && rope.declineFrames >= 3;
       const timedOut = elapsed > 1300;
       if (passedPeak || timedOut) {
         rope.evaluated = true;
@@ -379,9 +384,17 @@ function updateRope() {
       // retract: shrink segment length and the loop, pulling rope back to anchor
       rope.retract = Math.max(0, rope.retract - rope.retractRate);
       rope.loopRadius *= rope.loopFade;
+      // direct pull: yank every point toward anchor for a real "zap" feel
+      const pull = Math.min(0.15, rope.retractRate * 1.0);
+      for (let i = 1; i < rope.pts.length; i++) {
+        const p = rope.pts[i];
+        p.x += (anchor.x - p.x) * pull;
+        p.y += (anchor.y - p.y) * pull;
+        p.ox = p.x; p.oy = p.y;
+      }
       // end as soon as the tip is back near the cursor — don't wait for full collapse
       const tipDist = Math.hypot(tip.x - anchor.x, tip.y - anchor.y);
-      if (tipDist < 20) {
+      if (tipDist < 35) {
         for (const s of shapes) {
           if (s.selected) {
             s.dx = s.x - anchor.x;
@@ -504,8 +517,11 @@ canvas.addEventListener("mouseup", e => {
   // throw in the direction of the drag — drag toward target, release to throw at it
   const dx = aimEnd.x - aimStart.x;
   const dy = aimEnd.y - aimStart.y;
-  const power = Math.min(40, Math.hypot(dx, dy) / 4);
-  if (power < 1.5) return;
+  // dead-zone: tiny flicks don't launch at all
+  const drag = Math.hypot(dx, dy);
+  if (drag < 50) return;
+  // clamped linear: gentle for small drags, capped for big drags
+  const power = Math.min(35, 8 + (drag - 50) * 0.06);
   const angle = Math.atan2(dy, dx);
   launchLasso(angle, power);
 });
@@ -519,8 +535,10 @@ function launchLasso(angle, power) {
   updateHUD();
   rope = makeRope(anchor.x, anchor.y);
   // give every point a starting velocity in the throw direction, so the rope unfurls
-  const vx = Math.cos(angle) * power;
-  const vy = Math.sin(angle) * power;
+  // THROW_SPEED multiplier boosts how fast the rope flies, independent of drag-to-power feel
+  const THROW_SPEED = 1.3;
+  const vx = Math.cos(angle) * power * THROW_SPEED;
+  const vy = Math.sin(angle) * power * THROW_SPEED;
   for (let i = 1; i < rope.pts.length; i++) {
     const t = i / rope.pts.length;
     rope.pts[i].ox = rope.pts[i].x - vx * t;
@@ -532,7 +550,7 @@ function launchLasso(angle, power) {
   rope.evaluated = false;
   rope.power = power;
   // retract speed mirrors throw power: hard throw → snaps back fast, soft throw → drifts back
-  rope.retractRate = Math.max(0.012, power * 0.0018);
+  rope.retractRate = Math.max(0.08, power * 0.002);
   rope.loopFade = 1 - rope.retractRate * 3;
 }
 
